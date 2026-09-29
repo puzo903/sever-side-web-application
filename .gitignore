@@ -7,3 +7,4 @@
 journal.log
 .coverage
 .pytest_cache/
+.hypothesis/

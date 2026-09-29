@@ -1,4 +1,3 @@
-"""TCP RPC Server for Variant 18."""
 import socket
 import xmlrpc.client
 import logging
@@ -20,26 +19,32 @@ FUNCS = {
 }
 
 HEADER_SIZE = 5
-SIZE_OFFSET_START = 0
-SIZE_OFFSET_END = 4
-OPCODE_INDEX = 4
 
-RES_OPCODE_END = 2
-RES_SIZE_END = 5
-
+def recvall(sock: socket.socket, n: int):
+    data = bytearray()
+    while len(data) < n:
+        packet = sock.recv(n - len(data))
+        if not packet:
+            return None
+        data.extend(packet)
+    return bytes(data)
 
 def process_request(conn: socket.socket) -> bool:
-    """Process single RPC request over TCP."""
-    header = conn.recv(HEADER_SIZE)
-    if not header or len(header) < HEADER_SIZE:
+    header = recvall(conn, HEADER_SIZE)
+    if not header:
         return False
 
-    size = int.from_bytes(header[SIZE_OFFSET_START:SIZE_OFFSET_END], 'little')
-    opcode = header[OPCODE_INDEX]
-    body = conn.recv(size).decode('utf-8')
+    size = int.from_bytes(header[0:4], 'little')
+    opcode = header[4]
 
-    args, _ = xmlrpc.client.loads(body)
+    body_bytes = recvall(conn, size)
+    if not body_bytes:
+        return False
+
+    body = body_bytes.decode('utf-8')
+
     try:
+        args, _ = xmlrpc.client.loads(body)
         result = FUNCS[opcode](*args)
     except Exception as error_msg:
         result = str(error_msg)
@@ -56,18 +61,18 @@ def process_request(conn: socket.socket) -> bool:
     logging.info("Opcode: %d, Size: %d", opcode, out_size)
     return True
 
-
 def run_server():
-    """Run TCP server."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
         tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         tcp_socket.bind(('127.0.0.1', 8000))
         tcp_socket.listen()
         while True:
-            conn, _ = tcp_socket.accept()
-            with conn:
-                process_request(conn)
-
+            try:
+                conn, _ = tcp_socket.accept()
+                with conn:
+                    process_request(conn)
+            except Exception as e:
+                logging.error(f"Сбой при обработке: {e}")
 
 if __name__ == '__main__':
     run_server()
