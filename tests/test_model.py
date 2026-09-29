@@ -1,16 +1,9 @@
-import sys
-import os
 import threading
 import time
-
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-)
-
 from hypothesis.stateful import RuleBasedStateMachine, rule
 import hypothesis.strategies as st
-from server import run_server
-from client import RPCClient
+from src.server import run_server
+from src.client import RPCClient
 
 VALID_TEXT = st.text(
     alphabet=st.characters(min_codepoint=32, max_codepoint=126), max_size=50

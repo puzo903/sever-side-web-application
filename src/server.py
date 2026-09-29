@@ -1,7 +1,7 @@
 import socket
 import xmlrpc.client
 import logging
-from app import (
+from src.app import (
     create_member,
     create_instruction,
     create_response,
