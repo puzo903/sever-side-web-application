@@ -3,6 +3,7 @@ import xmlrpc.client
 
 HEADER_SIZE = 5
 
+
 def recvall(sock: socket.socket, n: int):
     data = bytearray()
     while len(data) < n:
@@ -12,17 +13,18 @@ def recvall(sock: socket.socket, n: int):
         data.extend(packet)
     return bytes(data)
 
+
 class RPCClient:
-    def __init__(self, host: str = '127.0.0.1', port: int = 8000):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8000):
         self.addr = (host, port)
 
     def _call(self, opcode: int, *args) -> dict:
         body = xmlrpc.client.dumps(args, methodname="call")
-        body_bytes = body.encode('utf-8')
+        body_bytes = body.encode("utf-8")
         size = len(body_bytes)
 
-        size_bytes = size.to_bytes(4, 'little')
-        op_bytes = opcode.to_bytes(1, 'little')
+        size_bytes = size.to_bytes(4, "little")
+        op_bytes = opcode.to_bytes(1, "little")
         header = size_bytes + op_bytes
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_sock:
@@ -30,10 +32,10 @@ class RPCClient:
             tcp_sock.sendall(header + body_bytes)
 
             res_header = recvall(tcp_sock, HEADER_SIZE)
-            res_size = int.from_bytes(res_header[2:5], 'little')
+            res_size = int.from_bytes(res_header[2:5], "little")
             res_body_bytes = recvall(tcp_sock, res_size)
 
-            res_body = res_body_bytes.decode('utf-8')
+            res_body = res_body_bytes.decode("utf-8")
             return xmlrpc.client.loads(res_body)[0][0]
 
     def create_member(self, ip: str, ua: str):

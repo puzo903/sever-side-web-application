@@ -7,10 +7,12 @@ responses = []
 OFFSET_MINUTES = 9
 SECONDS_IN_MINUTE = 60
 
+
 def get_next_id(table: list) -> int:
     if not table:
         return 0
     return max(table, key=lambda e: e["id"])["id"] + 1
+
 
 def create_entity(entity: dict, table: list) -> dict:
     time_int = int(datetime.datetime.now().timestamp())
@@ -19,31 +21,45 @@ def create_entity(entity: dict, table: list) -> dict:
     table.append(entity)
     return entity
 
+
 def create_member(ip: str, user_agent: str) -> dict:
     return create_entity({"ip": ip, "user_agent": user_agent}, members)
+
 
 def create_instruction(arg: str, mem: int, desc: str, st: str) -> dict:
     return create_entity(
         {"argument": arg, "member": mem, "description": desc, "state": st},
-        instructions
+        instructions,
     )
 
-def create_response(res: str, st: str, err: str, inst: int,
-                    ch: int, dur: int) -> dict:
+
+def create_response(
+    res: str, st: str, err: str, inst: int, ch: int, dur: int
+) -> dict:
     return create_entity(
-        {"response": res, "state": st, "error": err, "instruction": inst,
-         "cache_hit": ch, "duration": dur},
-        responses
+        {
+            "response": res,
+            "state": st,
+            "error": err,
+            "instruction": inst,
+            "cache_hit": ch,
+            "duration": dur,
+        },
+        responses,
     )
+
 
 def get_all_members() -> list:
     return members
 
+
 def get_all_instructions() -> list:
     return instructions
 
+
 def get_all_responses() -> list:
     return responses
+
 
 def get_by_id(uid: int, table: list) -> dict:
     for row in table:
@@ -51,14 +67,18 @@ def get_by_id(uid: int, table: list) -> dict:
             return row
     return {}
 
+
 def get_member(uid: int) -> dict:
     return get_by_id(uid, members)
+
 
 def get_instruction(uid: int) -> dict:
     return get_by_id(uid, instructions)
 
+
 def get_response(uid: int) -> dict:
     return get_by_id(uid, responses)
+
 
 def edit_member(uid: int, ip: str, user_agent: str) -> dict:
     member = get_member(uid)
@@ -66,6 +86,7 @@ def edit_member(uid: int, ip: str, user_agent: str) -> dict:
         member["ip"] = ip
         member["user_agent"] = user_agent
     return member
+
 
 def edit_instruction(uid: int, arg: str, mem: int, desc: str, st: str) -> dict:
     inst = get_instruction(uid)
@@ -76,8 +97,10 @@ def edit_instruction(uid: int, arg: str, mem: int, desc: str, st: str) -> dict:
         inst["state"] = st
     return inst
 
-def edit_response(uid: int, res: str, st: str, err: str, inst: int,
-                  ch: int, dur: int) -> dict:
+
+def edit_response(
+    uid: int, res: str, st: str, err: str, inst: int, ch: int, dur: int
+) -> dict:
     response_item = get_response(uid)
     if response_item:
         response_item["response"] = res
@@ -88,6 +111,7 @@ def edit_response(uid: int, res: str, st: str, err: str, inst: int,
         response_item["duration"] = dur
     return response_item
 
+
 def join_data() -> list:
     result = []
     current_time = int(datetime.datetime.now().timestamp())
@@ -96,12 +120,15 @@ def join_data() -> list:
         if i["created"] >= offset:
             for r in responses:
                 if i["id"] == r["instruction"]:
-                    result.append({
-                        "description": i["description"],
-                        "cache_hit": r["cache_hit"],
-                        "response": r["response"]
-                    })
+                    result.append(
+                        {
+                            "description": i["description"],
+                            "cache_hit": r["cache_hit"],
+                            "response": r["response"],
+                        }
+                    )
     return result
+
 
 def repl_create(cmd: list):
     """Handle create commands in REPL."""
@@ -110,17 +137,33 @@ def repl_create(cmd: list):
     elif cmd[1] == "instruction":
         print(create_instruction(cmd[2], int(cmd[3]), cmd[4], cmd[5]))
     elif cmd[1] == "response":
-        print(create_response(cmd[2], cmd[3], cmd[4], int(cmd[5]),
-                              int(cmd[6]), int(cmd[7])))
+        print(
+            create_response(
+                cmd[2], cmd[3], cmd[4], int(cmd[5]), int(cmd[6]), int(cmd[7])
+            )
+        )
+
 
 def repl_edit(cmd: list):
     if cmd[1] == "member":
         print(edit_member(int(cmd[2]), cmd[3], cmd[4]))
     elif cmd[1] == "instruction":
-        print(edit_instruction(int(cmd[2]), cmd[3], int(cmd[4]), cmd[5], cmd[6]))
+        print(
+            edit_instruction(int(cmd[2]), cmd[3], int(cmd[4]), cmd[5], cmd[6])
+        )
     elif cmd[1] == "response":
-        print(edit_response(int(cmd[2]), cmd[3], cmd[4], cmd[5],
-                            int(cmd[6]), int(cmd[7]), int(cmd[8])))
+        print(
+            edit_response(
+                int(cmd[2]),
+                cmd[3],
+                cmd[4],
+                cmd[5],
+                int(cmd[6]),
+                int(cmd[7]),
+                int(cmd[8]),
+            )
+        )
+
 
 def repl_get_all(cmd: list):
     if cmd[1] == "members":
@@ -130,6 +173,7 @@ def repl_get_all(cmd: list):
     elif cmd[1] == "responses":
         print(get_all_responses())
 
+
 def repl_get(cmd: list):
     if cmd[1] == "member":
         print(get_member(int(cmd[2])))
@@ -138,16 +182,19 @@ def repl_get(cmd: list):
     elif cmd[1] == "response":
         print(get_response(int(cmd[2])))
 
+
 def repl_join(cmd: list):
     print(join_data())
+
 
 DISPATCHER = {
     "create": repl_create,
     "edit": repl_edit,
     "get_all": repl_get_all,
     "get": repl_get,
-    "join": repl_join
+    "join": repl_join,
 }
+
 
 def run_repl():
     while True:
@@ -162,6 +209,7 @@ def run_repl():
             break
         except Exception as error_msg:
             print(error_msg)
+
 
 if __name__ == "__main__":
     run_repl()

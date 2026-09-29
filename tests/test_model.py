@@ -3,18 +3,23 @@ import os
 import threading
 import time
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 
 from hypothesis.stateful import RuleBasedStateMachine, rule
 import hypothesis.strategies as st
 from server import run_server
 from client import RPCClient
 
-VALID_TEXT = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=126), max_size=50)
+VALID_TEXT = st.text(
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126), max_size=50
+)
 
 SERVER_THREAD = threading.Thread(target=run_server, daemon=True)
 SERVER_THREAD.start()
 time.sleep(1)
+
 
 class RPCTestingMachine(RuleBasedStateMachine):
     def __init__(self):
@@ -37,8 +42,13 @@ class RPCTestingMachine(RuleBasedStateMachine):
         if isinstance(res, dict) and "id" in res:
             self.inst_ids.append(res["id"])
 
-    @rule(res=VALID_TEXT, state=VALID_TEXT, err=VALID_TEXT,
-          ch=st.integers(min_value=0, max_value=1000), dur=st.integers(min_value=0, max_value=1000))
+    @rule(
+        res=VALID_TEXT,
+        state=VALID_TEXT,
+        err=VALID_TEXT,
+        ch=st.integers(min_value=0, max_value=1000),
+        dur=st.integers(min_value=0, max_value=1000),
+    )
     def test_create_response(self, res, state, err, ch, dur):
         inst = self.inst_ids[0] if self.inst_ids else 0
         resp = self.client.create_response(res, state, err, inst, ch, dur)
@@ -81,17 +91,27 @@ class RPCTestingMachine(RuleBasedStateMachine):
     def test_edit_instruction(self, arg, desc, state):
         if self.inst_ids:
             mem = self.member_ids[0] if self.member_ids else 0
-            self.client.edit_instruction(self.inst_ids[0], arg, mem, desc, state)
+            self.client.edit_instruction(
+                self.inst_ids[0], arg, mem, desc, state
+            )
 
-    @rule(res=VALID_TEXT, state=VALID_TEXT, err=VALID_TEXT,
-          ch=st.integers(min_value=0, max_value=1000), dur=st.integers(min_value=0, max_value=1000))
+    @rule(
+        res=VALID_TEXT,
+        state=VALID_TEXT,
+        err=VALID_TEXT,
+        ch=st.integers(min_value=0, max_value=1000),
+        dur=st.integers(min_value=0, max_value=1000),
+    )
     def test_edit_response(self, res, state, err, ch, dur):
         if self.resp_ids:
             inst = self.inst_ids[0] if self.inst_ids else 0
-            self.client.edit_response(self.resp_ids[0], res, state, err, inst, ch, dur)
+            self.client.edit_response(
+                self.resp_ids[0], res, state, err, inst, ch, dur
+            )
 
     @rule()
     def test_join_data(self):
         self.client.join_data()
+
 
 TestRPC = RPCTestingMachine.TestCase
