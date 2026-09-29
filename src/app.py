@@ -127,6 +127,19 @@ def join_data() -> list:
                             "response": r["response"],
                         }
                     )
+    for r in responses:
+        found = False
+        for i in instructions:
+            if i["id"] == r["instruction"]:
+                found = True
+        if not found:
+            result.append(
+                {
+                    "description": None,
+                    "cache_hit": r["cache_hit"],
+                    "response": r["response"],
+                }
+            )
     return result
 
 

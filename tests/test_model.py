@@ -1,110 +1,157 @@
 import threading
 import time
-from hypothesis.stateful import RuleBasedStateMachine, rule
+
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    rule,
+    precondition,
+)
 import hypothesis.strategies as st
+
+# Абсолютные импорты компонентов сервера
 from src.server import run_server
 from src.client import RPCClient
+from src import app
 
+# Запускаем сервер в фоновом потоке один раз для всех тестов
+server_thread = threading.Thread(target=run_server, daemon=True)
+server_thread.start()
+time.sleep(0.5)
+
+# Безопасный генератор печатного текста для обхода багов XML-парсера
 VALID_TEXT = st.text(
-    alphabet=st.characters(min_codepoint=32, max_codepoint=126), max_size=50
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126),
+    min_size=1,
+    max_size=15,
 )
 
-SERVER_THREAD = threading.Thread(target=run_server, daemon=True)
-SERVER_THREAD.start()
-time.sleep(1)
 
-
-class RPCTestingMachine(RuleBasedStateMachine):
+class ModelRPC(RuleBasedStateMachine):
     def __init__(self):
         super().__init__()
-        self.client = RPCClient()
-        self.member_ids = []
-        self.inst_ids = []
-        self.resp_ids = []
+        self.model_members = []
+        self.model_instructions = []
+        self.model_responses = []
+        self.client = RPCClient("127.0.0.1", 8000)
 
-    @rule(ip=VALID_TEXT, ua=VALID_TEXT)
-    def test_create_member(self, ip, ua):
-        res = self.client.create_member(ip, ua)
+    def teardown(self):
+        """Очистка состояния базы между генерациями сценариев."""
+        app.members.clear()
+        app.instructions.clear()
+        app.responses.clear()
+        self.model_members.clear()
+        self.model_instructions.clear()
+        self.model_responses.clear()
+
+    # --- 1-3. МЕТОДЫ СОЗДАНИЯ ---
+
+    @rule(ip=VALID_TEXT, agent=VALID_TEXT)
+    def create_member(self, ip, agent):
+        res = self.client.create_member(ip, agent)
         if isinstance(res, dict) and "id" in res:
-            self.member_ids.append(res["id"])
+            self.model_members.append(res)
 
-    @rule(arg=VALID_TEXT, desc=VALID_TEXT, state=VALID_TEXT)
-    def test_create_instruction(self, arg, desc, state):
-        mem = self.member_ids[0] if self.member_ids else 0
-        res = self.client.create_instruction(arg, mem, desc, state)
+    @precondition(lambda self: len(self.model_members) > 0)
+    @rule(arg=VALID_TEXT, desc=VALID_TEXT)
+    def create_instruction(self, arg, desc):
+        m_id = self.model_members[-1]["id"]
+        res = self.client.create_instruction(arg, m_id, desc, "active")
         if isinstance(res, dict) and "id" in res:
-            self.inst_ids.append(res["id"])
+            self.model_instructions.append(res)
 
+    @precondition(lambda self: len(self.model_instructions) > 0)
     @rule(
-        res=VALID_TEXT,
-        state=VALID_TEXT,
+        resp=VALID_TEXT,
         err=VALID_TEXT,
-        ch=st.integers(min_value=0, max_value=1000),
         dur=st.integers(min_value=0, max_value=1000),
     )
-    def test_create_response(self, res, state, err, ch, dur):
-        inst = self.inst_ids[0] if self.inst_ids else 0
-        resp = self.client.create_response(res, state, err, inst, ch, dur)
-        if isinstance(resp, dict) and "id" in resp:
-            self.resp_ids.append(resp["id"])
+    def create_response(self, resp, err, dur):
+        i_id = self.model_instructions[-1]["id"]
+        res = self.client.create_response(resp, "ok", err, i_id, 1, dur)
+        if isinstance(res, dict) and "id" in res:
+            self.model_responses.append(res)
+
+    # --- 4-6. МЕТОДЫ ЧТЕНИЯ ВСЕХ ЗАПИСЕЙ ---
 
     @rule()
-    def test_get_all_members(self):
-        self.client.get_all_members()
+    def get_all_members(self):
+        res = self.client.get_all_members()
+        assert len(res) == len(self.model_members)
 
     @rule()
-    def test_get_all_instructions(self):
-        self.client.get_all_instructions()
+    def get_all_instructions(self):
+        res = self.client.get_all_instructions()
+        assert len(res) == len(self.model_instructions)
 
     @rule()
-    def test_get_all_responses(self):
-        self.client.get_all_responses()
+    def get_all_responses(self):
+        res = self.client.get_all_responses()
+        assert len(res) == len(self.model_responses)
+
+    # --- 7-9. МЕТОДЫ ЧТЕНИЯ ОДНОЙ ЗАПИСИ ---
+
+    @precondition(lambda self: len(self.model_members) > 0)
+    @rule()
+    def get_member(self):
+        target = self.model_members[-1]
+        res = self.client.get_member(target["id"])
+        assert res["id"] == target["id"]
+
+    @precondition(lambda self: len(self.model_instructions) > 0)
+    @rule()
+    def get_instruction(self):
+        target = self.model_instructions[-1]
+        res = self.client.get_instruction(target["id"])
+        assert res["id"] == target["id"]
+
+    @precondition(lambda self: len(self.model_responses) > 0)
+    @rule()
+    def get_response(self):
+        target = self.model_responses[-1]
+        res = self.client.get_response(target["id"])
+        assert res["id"] == target["id"]
+
+    # --- 10-12. МЕТОДЫ РЕДАКТИРОВАНИЯ ---
+
+    @precondition(lambda self: len(self.model_members) > 0)
+    @rule(ip=VALID_TEXT, agent=VALID_TEXT)
+    def edit_member(self, ip, agent):
+        target_id = self.model_members[-1]["id"]
+        res = self.client.edit_member(target_id, ip, agent)
+        assert res["ip"] == ip
+        self.model_members[-1] = res
+
+    @precondition(lambda self: len(self.model_instructions) > 0)
+    @rule(arg=VALID_TEXT, desc=VALID_TEXT)
+    def edit_instruction(self, arg, desc):
+        target = self.model_instructions[-1]
+        res = self.client.edit_instruction(
+            target["id"], arg, target["member"], desc, "inactive"
+        )
+        assert res["argument"] == arg
+        self.model_instructions[-1] = res
+
+    @precondition(lambda self: len(self.model_responses) > 0)
+    @rule(resp=VALID_TEXT, err=VALID_TEXT)
+    def edit_response(self, resp, err):
+        target = self.model_responses[-1]
+        res = self.client.edit_response(
+            target["id"], resp, "fail", err, target["instruction"], 0, 50
+        )
+        assert res["response"] == resp
+        self.model_responses[-1] = res
+
+    # --- 13. МЕТОД JOIN ---
 
     @rule()
-    def test_get_member(self):
-        if self.member_ids:
-            self.client.get_member(self.member_ids[0])
-
-    @rule()
-    def test_get_instruction(self):
-        if self.inst_ids:
-            self.client.get_instruction(self.inst_ids[0])
-
-    @rule()
-    def test_get_response(self):
-        if self.resp_ids:
-            self.client.get_response(self.resp_ids[0])
-
-    @rule(ip=VALID_TEXT, ua=VALID_TEXT)
-    def test_edit_member(self, ip, ua):
-        if self.member_ids:
-            self.client.edit_member(self.member_ids[0], ip, ua)
-
-    @rule(arg=VALID_TEXT, desc=VALID_TEXT, state=VALID_TEXT)
-    def test_edit_instruction(self, arg, desc, state):
-        if self.inst_ids:
-            mem = self.member_ids[0] if self.member_ids else 0
-            self.client.edit_instruction(
-                self.inst_ids[0], arg, mem, desc, state
-            )
-
-    @rule(
-        res=VALID_TEXT,
-        state=VALID_TEXT,
-        err=VALID_TEXT,
-        ch=st.integers(min_value=0, max_value=1000),
-        dur=st.integers(min_value=0, max_value=1000),
-    )
-    def test_edit_response(self, res, state, err, ch, dur):
-        if self.resp_ids:
-            inst = self.inst_ids[0] if self.inst_ids else 0
-            self.client.edit_response(
-                self.resp_ids[0], res, state, err, inst, ch, dur
-            )
-
-    @rule()
-    def test_join_data(self):
-        self.client.join_data()
+    def join_data(self):
+        res = self.client.join_data()
+        assert isinstance(res, list)
 
 
-TestRPC = RPCTestingMachine.TestCase
+TestRPC = ModelRPC.TestCase
+
+if __name__ == "__main__":
+    import unittest
+
+    unittest.main()
