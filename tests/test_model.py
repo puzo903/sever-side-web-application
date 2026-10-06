@@ -8,17 +8,14 @@ from hypothesis.stateful import (
 )
 import hypothesis.strategies as st
 
-# Абсолютные импорты компонентов сервера
 from src.server import run_server
 from src.client import RPCClient
 from src import app
 
-# Запускаем сервер в фоновом потоке один раз для всех тестов
 server_thread = threading.Thread(target=run_server, daemon=True)
 server_thread.start()
 time.sleep(0.5)
 
-# Безопасный генератор печатного текста для обхода багов XML-парсера
 VALID_TEXT = st.text(
     alphabet=st.characters(min_codepoint=32, max_codepoint=126),
     min_size=1,
@@ -35,15 +32,12 @@ class ModelRPC(RuleBasedStateMachine):
         self.client = RPCClient("127.0.0.1", 8000)
 
     def teardown(self):
-        """Очистка состояния базы между генерациями сценариев."""
         app.members.clear()
         app.instructions.clear()
         app.responses.clear()
         self.model_members.clear()
         self.model_instructions.clear()
         self.model_responses.clear()
-
-    # --- 1-3. МЕТОДЫ СОЗДАНИЯ ---
 
     @rule(ip=VALID_TEXT, agent=VALID_TEXT)
     def create_member(self, ip, agent):
@@ -71,8 +65,6 @@ class ModelRPC(RuleBasedStateMachine):
         if isinstance(res, dict) and "id" in res:
             self.model_responses.append(res)
 
-    # --- 4-6. МЕТОДЫ ЧТЕНИЯ ВСЕХ ЗАПИСЕЙ ---
-
     @rule()
     def get_all_members(self):
         res = self.client.get_all_members()
@@ -87,8 +79,6 @@ class ModelRPC(RuleBasedStateMachine):
     def get_all_responses(self):
         res = self.client.get_all_responses()
         assert len(res) == len(self.model_responses)
-
-    # --- 7-9. МЕТОДЫ ЧТЕНИЯ ОДНОЙ ЗАПИСИ ---
 
     @precondition(lambda self: len(self.model_members) > 0)
     @rule()
@@ -110,8 +100,6 @@ class ModelRPC(RuleBasedStateMachine):
         target = self.model_responses[-1]
         res = self.client.get_response(target["id"])
         assert res["id"] == target["id"]
-
-    # --- 10-12. МЕТОДЫ РЕДАКТИРОВАНИЯ ---
 
     @precondition(lambda self: len(self.model_members) > 0)
     @rule(ip=VALID_TEXT, agent=VALID_TEXT)
@@ -140,8 +128,6 @@ class ModelRPC(RuleBasedStateMachine):
         )
         assert res["response"] == resp
         self.model_responses[-1] = res
-
-    # --- 13. МЕТОД JOIN ---
 
     @rule()
     def join_data(self):
